@@ -1,0 +1,27 @@
+name: PTEditor Test
+on: [push]
+jobs:
+  test-module-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: pwd
+      - run: uname -a
+      - run: ls -hal
+      - run: sudo apt install gcc g++ linux-headers-$(uname -r)
+      - run: make && git diff --exit-code
+      - run: sudo insmod module/pteditor.ko
+      - run: ./test/tests
+  test-module-2004:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - run: pwd
+      - run: uname -a
+      - run: ls -hal
+      - run: sudo apt install gcc g++ linux-headers-$(uname -r)
+      - run: make && git diff --exit-code
+      - run: sudo insmod module/pteditor.ko
+      - run: ./test/tests
+
+
