@@ -2,6 +2,7 @@
 Licensed under the GNU General Public License version 2 or later.
 */
 #define _GNU_SOURCE
+#include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -26,21 +27,34 @@ fault_handler_thread(void *arg) {
     long uffd; /* userfaultfd file descriptor */
     ssize_t nread;
     struct pollfd pollfd;
-    struct uffdio_copy uffdio_copy;
+    // struct uffdio_copy uffdio_copy;
+    struct uffdio_range uffdio_range;
 
     static int fault_cnt = 0; /* Number of faults so far handled */
-    static char *page = NULL;
+#define BUFPOOLSIZE 1024
+    static char *bufpool[BUFPOOLSIZE]; // use fault_cnt as index to get buf
     static struct uffd_msg msg; /* Data read from userfaultfd */
 
     uffd = (long) arg;
 
-    /* Create a page that will be copied into the faulting region. */
+    /* Init */
+    if (fault_cnt == 0) {
+        /* Create a buffer pool that will be allocated to the faulting region. */
+        for (int i = 0; i < BUFPOOLSIZE; i++) {
+            int result = posix_memalign((void **)&bufpool[i], page_size, page_size);
+            if (result != 0) {
+                printf("Error: posix_memalign failed with error code %d\n", result);
+                exit(1);
+            }
+        }
 
-    if (page == NULL) {
-        page = mmap(NULL, page_size, PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (page == MAP_FAILED)
-            err(EXIT_FAILURE, "mmap");
+        /*init PTEditor*/
+        if (ptedit_init()) {
+            printf("Error: Could not initalize PTEditor, did you load the kernel module?\n");
+            exit(1);
+        }
+
+        ptedit_use_implementation(PTEDIT_IMPL_USER);
     }
 
     /* Loop, handling incoming events on the userfaultfd
@@ -89,24 +103,27 @@ fault_handler_thread(void *arg) {
            region. Vary the contents that are copied in, so that it
            is more obvious that each fault is handled separately. */
 
-        memset(page, 'A' + fault_cnt % 20, page_size);
-        fault_cnt++;
+        assert(fault_cnt < BUFPOOLSIZE);
+        const char *given_page = bufpool[fault_cnt++];
+        memset((void *)given_page, 'A' + fault_cnt % 20, page_size);
 
-        uffdio_copy.src = (unsigned long) page;
+        // 1. get the pfd of given_page
+        size_t given_page_pfn = ptedit_pte_get_pfn((void *)given_page, 0);
+        // 2. get the ptedit_entry of fault address
+        ptedit_entry_t vm = ptedit_resolve(msg.arg.pagefault.address, 0);
+        // 3. update to pfn of fault address, and set valid bit, and update
+        vm.pte = ptedit_set_pfn(vm.pte, given_page_pfn);
+        vm.valid = PTEDIT_VALID_MASK_PTE;
+        ptedit_update(msg.arg.pagefault.address, 0, &vm);
 
         /* We need to handle page faults in units of pages(!).
-           So, round faulting address down to page boundary. */
+            So, round faulting address down to page boundary. */
+        uffdio_range.start = (unsigned long) msg.arg.pagefault.address & ~(page_size - 1);
+        uffdio_range.len = page_size;
+        if (ioctl(uffd, UFFDIO_WAKE, &uffdio_range) == -1)
+            err(EXIT_FAILURE, "ioctl-UFFDIO_WAKE");
 
-        uffdio_copy.dst = (unsigned long) msg.arg.pagefault.address &
-                          ~(page_size - 1);
-        uffdio_copy.len = page_size;
-        uffdio_copy.mode = 0;
-        uffdio_copy.copy = 0;
-        if (ioctl(uffd, UFFDIO_COPY, &uffdio_copy) == -1)
-            err(EXIT_FAILURE, "ioctl-UFFDIO_COPY");
-
-        printf("        (uffdio_copy.copy returned %"PRId64")\n",
-               uffdio_copy.copy);
+        printf("       uffdio_wake returned\n");
     }
 }
 

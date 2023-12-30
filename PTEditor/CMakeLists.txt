@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(pteditor)
-
 # 指定源文件
 file(GLOB SOURCES "*.c" "*.cpp")
 file(GLOB_RECURSE HEADER_FILES "*.h")
@@ -19,3 +17,5 @@ install(TARGETS pteditor
 
 # 可选：安装头文件
 install(FILES ${HEADER_FILES} DESTINATION include)
+
+add_subdirectory(demos)
