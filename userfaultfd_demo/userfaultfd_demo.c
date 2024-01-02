@@ -19,6 +19,15 @@ Licensed under the GNU General Public License version 2 or later.
 #include <unistd.h>
 #include <ptedit_header.h>
 
+#define COLOR_RED     "\x1b[31m"
+#define COLOR_GREEN   "\x1b[32m"
+#define COLOR_YELLOW  "\x1b[33m"
+#define COLOR_RESET   "\x1b[0m"
+
+#define TAG_OK COLOR_GREEN "[+]" COLOR_RESET " "
+#define TAG_FAIL COLOR_RED "[-]" COLOR_RESET " "
+#define TAG_PROGRESS COLOR_YELLOW "[~]" COLOR_RESET " "
+
 static int page_size;
 
 static void *
@@ -109,12 +118,39 @@ fault_handler_thread(void *arg) {
 
         // 1. get the pfd of given_page
         size_t given_page_pfn = ptedit_pte_get_pfn((void *)given_page, 0);
+        // debug: print given_page
+        // {
+        //     ptedit_entry_t given_page_vm = ptedit_resolve((void *)given_page, 0);
+        //     ptedit_print_entry_t(given_page_vm);
+        //     printf(TAG_PROGRESS "given page vm %zx\n", (size_t)(ptedit_cast(given_page_vm.pte, ptedit_pte_t).pfn));
+        // }
         // 2. get the ptedit_entry of fault address
         ptedit_entry_t vm = ptedit_resolve(msg.arg.pagefault.address, 0);
+        // debug:print page fault address
+        // {
+        //     ptedit_print_entry_t(vm);
+        //     printf(TAG_PROGRESS "fault address %zx\n", (size_t)(ptedit_cast(vm.pte, ptedit_pte_t).pfn));
+        // }
         // 3. update to pfn of fault address, and set valid bit, and update
         vm.pte = ptedit_set_pfn(vm.pte, given_page_pfn);
+        vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_PRESENT);
+        vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_RW);
+        vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_USER);
         vm.valid = PTEDIT_VALID_MASK_PTE;
         ptedit_update(msg.arg.pagefault.address, 0, &vm);
+
+        // debug: print updated page fault address
+        // {
+        //     ptedit_entry_t vm = ptedit_resolve(msg.arg.pagefault.address, 0);
+        //     ptedit_print_entry_t(vm);
+        //     printf(TAG_PROGRESS "updated fault address %zx\n", (size_t)(ptedit_cast(vm.pte, ptedit_pte_t).pfn));
+        // }
+
+        // debug: try to access the page
+        {
+            char ch = *(char*)(msg.arg.pagefault.address);
+            printf(TAG_PROGRESS "Try to access page fault address: %c\n", ch);
+        }
 
         /* We need to handle page faults in units of pages(!).
             So, round faulting address down to page boundary. */
