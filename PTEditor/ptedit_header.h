@@ -1020,8 +1020,8 @@ static ptedit_paging_definition_t ptedit_paging_definition;
 
 
 // ---------------------------------------------------------------------------
-ptedit_fnc ptedit_resolve_t ptedit_resolve;
-ptedit_fnc ptedit_update_t ptedit_update;
+//ptedit_fnc ptedit_resolve_t ptedit_resolve;
+//ptedit_fnc ptedit_update_t ptedit_update;
 
 
 // ---------------------------------------------------------------------------

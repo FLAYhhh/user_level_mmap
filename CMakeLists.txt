@@ -1,9 +1,12 @@
-cmake_minimum_required(VERSION 3.21)
-project(user_level_mmap C)
+cmake_minimum_required(VERSION 3.16)
+project(user_level_mmap C CXX)
 
-# 设置C标准
 set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(PTEditor)
-add_subdirectory(userfaultfd_demo)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+add_subdirectory(src)
+
+add_subdirectory(demos)
+

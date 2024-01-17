@@ -12,6 +12,7 @@
 
 int main(int argc, char** argv)
 {
+    /*
   if (ptedit_init()) {
       printf("Error: Could not initalize PTEditor, did you load the kernel module?\n");
       return 1;
@@ -21,12 +22,12 @@ int main(int argc, char** argv)
   memset(addr,0x42,2*1024*1024);
   
   ptedit_entry_t entry = ptedit_resolve(addr, 0);
-  ptedit_clear_bit(addr, 0, PTEDIT_PAGE_BIT_ACCESSED,PTEDIT_VALID_MASK_PUD|PTEDIT_VALID_MASK_PMD|PTEDIT_VALID_MASK_PTE);
+  ptedit_pte_clear_bit(addr, 0, PTEDIT_PAGE_BIT_ACCESSED,PTEDIT_VALID_MASK_PUD|PTEDIT_VALID_MASK_PMD|PTEDIT_VALID_MASK_PTE);
   entry = ptedit_resolve(addr, 0);
   ptedit_print_entry(entry.pte);
   ptedit_print_entry(entry.pmd);
   ptedit_print_entry(entry.pud);
-  ptedit_set_bit(addr, 0, PTEDIT_PAGE_BIT_ACCESSED,PTEDIT_VALID_MASK_PUD|PTEDIT_VALID_MASK_PMD|PTEDIT_VALID_MASK_PTE);
+  ptedit_pte_set_bit(addr, 0, PTEDIT_PAGE_BIT_ACCESSED,PTEDIT_VALID_MASK_PUD|PTEDIT_VALID_MASK_PMD|PTEDIT_VALID_MASK_PTE);
   entry = ptedit_resolve(addr, 0);
   ptedit_print_entry(entry.pte);
   ptedit_print_entry(entry.pmd);
@@ -38,6 +39,7 @@ int main(int argc, char** argv)
   munmap(addr,4096);
 
   ptedit_cleanup();
+  */
 
   return 0;
 }
