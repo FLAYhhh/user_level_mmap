@@ -4,3 +4,13 @@ This project is intended to implement a user level mmap.
 
 # TODO
 1. ul_munmap
+ul_munmap should release these resources:
+(ul_munmap part)
+- physical mems, and write back to files if needed. (how to detect dirty pages? scan vma or scan buffer pool?)
+- uffd
+
+(munmap part)
+- VMA
+
+(who should release PTEs?)
+- PTEs
