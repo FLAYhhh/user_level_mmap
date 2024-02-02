@@ -7,3 +7,4 @@ add_library(user_level_mmap STATIC ${SOURCE_FILES}
 target_include_directories(user_level_mmap PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 target_link_libraries(user_level_mmap pthread)
 target_link_libraries(user_level_mmap pteditor)
+target_link_libraries(user_level_mmap jemalloc)
