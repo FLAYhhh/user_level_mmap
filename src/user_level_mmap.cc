@@ -66,12 +66,14 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
         nready = poll(&pollfd, 1, -1);
         if (nready == -1) err(EXIT_FAILURE, "poll");
 
+        /*
         printf("\nfault_handler_thread():\n");
         printf(
             "    poll() returns: nready = %d; "
             "POLLIN = %d; POLLERR = %d\n",
             nready, (pollfd.revents & POLLIN) != 0,
             (pollfd.revents & POLLERR) != 0);
+        */
 
         /* Read an event from the userfaultfd. */
 
@@ -92,9 +94,11 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
 
         /* Display info about the page-fault event. */
 
+        /*
         printf("    UFFD_EVENT_PAGEFAULT event: ");
         printf("flags = %llx; ", msg.arg.pagefault.flags);
         printf("address = %llx\n", msg.arg.pagefault.address);
+        */
 
         /* Copy the page pointed to by 'page' into the faulting
            region. Vary the contents that are copied in, so that it
@@ -112,6 +116,7 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
                                     pfh_args->offset + region_offset);
             assert(bytes_read == PAGE_SIZE);
         }
+        pfh_args->fault_cnt++;
 
         // 1. get the pfd of given_page
         size_t given_page_pfn = ptedit_pte_get_pfn(given_page, 0);
@@ -148,10 +153,12 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
         // }
 
         // debug: try to access the page
+        /*
         {
             char ch = *(char *)(msg.arg.pagefault.address);
             printf(TAG_PROGRESS "Try to access page fault address: %c\n", ch);
         }
+        */
 
         /* We need to handle page faults in units of pages(!).
             So, round faulting address down to page boundary. */
@@ -161,7 +168,7 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
         if (ioctl(uffd, UFFDIO_WAKE, &uffdio_range) == -1)
             err(EXIT_FAILURE, "ioctl-UFFDIO_WAKE");
 
-        printf("       uffdio_wake returned\n");
+        // printf("       uffdio_wake returned\n");
     }
 }
 
@@ -205,8 +212,6 @@ void *ul_mmap(void *addr, size_t length, int prot, int flags, int fd,
     uffdio_api.features = 0;
     if (ioctl(uffd, UFFDIO_API, &uffdio_api) == -1)
         err(EXIT_FAILURE, "ioctl-UFFDIO_API");
-
-    printf("Address returned by mmap() = %p\n", addr);
 
     /* Register the memory range of the mapping we just created for
        handling by the userfaultfd object. we request to track
