@@ -100,12 +100,11 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
            region. Vary the contents that are copied in, so that it
            is more obvious that each fault is handled separately. */
 
-        const char *given_page = je_malloc(PAGE_SIZE);
+        void *given_page = malloc(PAGE_SIZE);
         assert(given_page != nullptr);
 
         if (pfh_args->fd == -1) {
-            memset((void *)given_page, 'A' + pfh_args->fault_cnt % 26,
-                   PAGE_SIZE);
+            memset(given_page, 'A' + pfh_args->fault_cnt % 26, PAGE_SIZE);
         } else {
             auto region_offset =
                 msg.arg.pagefault.address - (__u64)pfh_args->base_addr;
@@ -115,7 +114,7 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
         }
 
         // 1. get the pfd of given_page
-        size_t given_page_pfn = ptedit_pte_get_pfn((void *)given_page, 0);
+        size_t given_page_pfn = ptedit_pte_get_pfn(given_page, 0);
         // debug: print given_page
         // {
         //     ptedit_entry_t given_page_vm = ptedit_resolve((void *)given_page,
@@ -261,7 +260,8 @@ int ul_munmap(void *addr, size_t length) {
         ioctl(pfh_args->second->uffd, UFFDIO_UNREGISTER, &uffdio_range);
 
         pfh_args->second->finish = true;
-        pfh_args->second->thread.join() : mmap_regions.erase(pfh_args);
+        pfh_args->second->thread.join();
+        mmap_regions.erase(pfh_args);
     } else {
         printf("ul_munmap: get none exist mmaping address %p\n", addr);
     }
