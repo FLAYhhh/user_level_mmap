@@ -32,15 +32,7 @@ int main(int argc, char *argv[]) {
 
   char page[ptedit_get_pagesize()];
 
-  void *address = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  memset(address, 'A', 4096);
-
-  void *target = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  memset(target, 'B', 4096);
-
-  printf(TAG_OK "address @ " COLOR_YELLOW "%p" COLOR_RESET "\n", address);
-  printf(TAG_OK "target @ " COLOR_YELLOW "%p" COLOR_RESET "\n", target);
-
+  void *address = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
   ptedit_entry_t vm = ptedit_resolve(address, 0);
   if(vm.pgd == 0) {
     printf(TAG_FAIL "Could not resolve PTs\n");
@@ -48,6 +40,23 @@ int main(int argc, char *argv[]) {
   }
   ptedit_print_entry_t(vm);
   printf(TAG_PROGRESS "PTE PFN %zx\n", (size_t)(ptedit_cast(vm.pte, ptedit_pte_t).pfn));
+
+  memset(address, 'A', 4096);
+
+  void *target = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  memset(target, 'B', 4096);
+
+  printf(TAG_OK "address @ " COLOR_YELLOW "%p" COLOR_RESET "\n", address);
+  printf(TAG_OK "target @ " COLOR_YELLOW "%p" COLOR_RESET "\n", target);
+#if 0
+  ptedit_entry_t vm = ptedit_resolve(address, 0);
+  if(vm.pgd == 0) {
+    printf(TAG_FAIL "Could not resolve PTs\n");
+    goto error;
+  }
+  ptedit_print_entry_t(vm);
+  printf(TAG_PROGRESS "PTE PFN %zx\n", (size_t)(ptedit_cast(vm.pte, ptedit_pte_t).pfn));
+#endif
 
   printf(TAG_PROGRESS "address[0] = " COLOR_YELLOW "%c" COLOR_RESET"\n", *(volatile char*)address);
   if(*(volatile char*)address == 'A') {
