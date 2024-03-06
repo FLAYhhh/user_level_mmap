@@ -19,6 +19,8 @@
 #include <thread>
 #include <unordered_map>
 
+#include "phy_page_pool.h"
+
 #define COLOR_YELLOW "\x1b[33m"
 #define COLOR_RESET "\x1b[0m"
 #define TAG_PROGRESS COLOR_YELLOW "[~]" COLOR_RESET " "
@@ -195,7 +197,7 @@ void *ul_mmap(void *addr, size_t length, int prot, int flags, int fd,
 
     PAGE_SIZE = sysconf(_SC_PAGE_SIZE);
     /* 1. alloc vm area by anonymous mmap syscall */
-    addr = mmap(addr, length, prot, MAP_ANONYMOUS, -1, offset);
+    addr = mmap(addr, length, prot, MAP_ANONYMOUS | MAP_PRIVATE, -1, offset);
     if (addr == MAP_FAILED) err(EXIT_FAILURE, "mmap");
 
     /* 2. make vm area's page-faults handled by user level: register userfaultfd
