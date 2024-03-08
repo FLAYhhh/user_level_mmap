@@ -1,6 +1,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstdio>
+#include <ctime>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -78,22 +79,43 @@ class MemoryPool {
         }
     }
 
-    void* allocate() {
+    int get_rough_richest_pool() {
         size_t richest_pool_idx = 0;
         size_t max_remain_pages = 0;
         // get a approximate richest pool
+        bool has_page = false;
         for (size_t i = 0; i < num_pools_; i++) {
             if (*local_remain_pages_[i] > max_remain_pages) {
+                has_page = true;
                 max_remain_pages = *local_remain_pages_[i];
                 richest_pool_idx = i;
             }
         }
 
-        Page* page =
-            local_pools_[richest_pool_idx]->load(std::memory_order_seq_cst);
-        Page* next = page->next.load(std::memory_order_seq_cst);
-        assert((size_t)page !=
-               0x2a2a2a2a2a2a2a2a);  // in test, we write 0x2a to page
+        if (has_page == false) {
+            return -1;
+        } else {
+            return richest_pool_idx;
+        }
+    }
+
+    void* allocate() {
+        size_t pool_idx =
+            std::hash<std::thread::id>{}(std::this_thread::get_id()) %
+            num_pools_;
+
+    retry:
+        Page *page = nullptr, *next = nullptr;
+
+        do {
+            page = local_pools_[pool_idx]->load(std::memory_order_seq_cst);
+        } while (page != nullptr &&
+                 !local_pools_[pool_idx]->compare_exchange_weak(
+                     page, page->next.load(std::memory_order_seq_cst),
+                     std::memory_order_seq_cst));
+
+        // assert((size_t)page != 0x2a2a2a2a2a2a2a2a);  // in test, we write
+        // 0x2a to page
         /*
         while (page != nullptr &&
                !local_pools_[richest_pool_idx]->compare_exchange_weak(
@@ -102,19 +124,29 @@ class MemoryPool {
             ;
             */
 
+        /*
         while (page != nullptr && (size_t)page != 0x2a2a2a2a2a2a2a2a &&
-               !local_pools_[richest_pool_idx]->compare_exchange_strong(
-                   page, page->next.load(std::memory_order_seq_cst))) {
-            page =
-                local_pools_[richest_pool_idx]->load(std::memory_order_seq_cst);
-            next = page->next.load(std::memory_order_seq_cst);
+               !local_pools_[pool_idx]->compare_exchange_strong(
+                   page, next)) {
+            //page =
+        local_pools_[richest_pool_idx]->load(std::memory_order_seq_cst); next =
+        page->next.load(std::memory_order_seq_cst);
         }
+        */
 
-        (*local_remain_pages_[richest_pool_idx])--;
+        (*local_remain_pages_[pool_idx])--;
 
-        printf("page: %p, next: %p\n", page, next);
-        assert((size_t)page != 0x2a2a2a2a2a2a2a2a);
-        assert((size_t)next != 0x2a2a2a2a2a2a2a2a);
+        // printf("page: %p, next: %p\n", page, next);
+        // assert((size_t)page != 0x2a2a2a2a2a2a2a2a);
+        // assert((size_t)next != 0x2a2a2a2a2a2a2a2a);
+    end:
+        if (page == nullptr) {
+            int ret = get_rough_richest_pool();
+            if (ret != -1) {
+                pool_idx = ret;
+                goto retry;
+            }
+        }
 
         return page;
     }
@@ -125,9 +157,14 @@ class MemoryPool {
         if (ptr == nullptr) {
             return;
         }
-        Page* page = static_cast<Page*>(ptr);
-        Page* expected = local_pools_[idx]->load(std::memory_order_seq_cst);
-        page->next.store(expected, std::memory_order_seq_cst);
+
+        Page *page = nullptr, *expected = nullptr;
+        do {
+            page = static_cast<Page*>(ptr);
+            expected = local_pools_[idx]->load(std::memory_order_seq_cst);
+            page->next.store(expected, std::memory_order_seq_cst);
+        } while (!local_pools_[idx]->compare_exchange_weak(
+            expected, page, std::memory_order_seq_cst));
         /*
         while (!local_pools_[idx]->compare_exchange_weak(
             expected, page, std::memory_order_acquire,
@@ -135,12 +172,21 @@ class MemoryPool {
             ;
             */
 
-        while (!local_pools_[idx]->compare_exchange_strong(expected, page)) {
-            Page* expected = local_pools_[idx]->load(std::memory_order_seq_cst);
-            page->next.store(expected, std::memory_order_seq_cst);
-        }
+        // assert((size_t)expected != 0x2a2a2a2a2a2a2a2a);
+        // assert((size_t)(page->next.load()) != 0x2a2a2a2a2a2a2a2a);
 
-        printf("dealloc page %p\n", ptr);
+        /*
+        while (!local_pools_[idx]->compare_exchange_strong(expected, page)) {
+            page->next.store(expected, std::memory_order_seq_cst);
+            //assert((size_t)expected != 0x2a2a2a2a2a2a2a2a);
+            //assert((size_t)(page->next.load()) != 0x2a2a2a2a2a2a2a2a);
+        }
+        */
+
+        // assert((size_t)(local_pools_[idx]->load(std::memory_order_seq_cst))!=
+        // 0x2a2a2a2a2a2a2a2a);
+        // assert((size_t)(local_pools_[idx]->load(std::memory_order_seq_cst)->next.load())
+        // != 0x2a2a2a2a2a2a2a2a); printf("dealloc page %p\n", ptr);
         (*local_remain_pages_[idx])++;
     }
 
