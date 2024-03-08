@@ -9,4 +9,3 @@ add_subdirectory(PTEditor)
 add_subdirectory(src)
 
 add_subdirectory(demos)
-

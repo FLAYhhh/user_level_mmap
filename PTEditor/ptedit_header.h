@@ -1911,6 +1911,11 @@ ptedit_fnc void ptedit_pte_set_bit(void* address, pid_t pid, int bit) {
     ptedit_update(address, pid, &vm);
 }
 
+// set only one bit int a single call
+ptedit_fnc size_t ptedit_pte_entry_set_bit(size_t pte, int bit) {
+    return pte |= (1ull << bit);
+}
+
 // ---------------------------------------------------------------------------
 ptedit_fnc void ptedit_pte_clear_bit(void* address, pid_t pid, int bit) {
     ptedit_entry_t vm = ptedit_resolve(address, pid);
