@@ -27,6 +27,8 @@
 
 static int PAGE_SIZE;
 
+MemoryPool *mem_pool;
+
 // page fault handler arguments
 struct PFhandle_args {
     PFhandle_args(long uffd_, int fd_, off_t offset_, void *base_addr_)
@@ -46,6 +48,47 @@ struct PFhandle_args {
 
 std::mutex mmap_regions_mu;
 std::unordered_map<void *, std::shared_ptr<PFhandle_args>> mmap_regions;
+
+void install_page(void *addr, ptedit_entry_t &vm, size_t pfn) {
+    vm.pte = ptedit_set_pfn(vm.pte, pfn);
+    vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_PRESENT);
+    vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_RW);
+    vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_USER);
+    vm.valid = PTEDIT_VALID_MASK_PTE;
+    ptedit_update(addr, 0, &vm);
+}
+
+void touch_page(void *addr) {
+    // 1. get the pte of addr
+    static bool init = false;
+    if (init == false) {
+        if (ptedit_init()) {
+            printf(
+                "Error: Could not initalize PTEditor, did you load the kernel "
+                "module?\n");
+            exit(1);
+        }
+
+        ptedit_use_implementation(PTEDIT_IMPL_USER);
+        if (mem_pool == nullptr) mem_pool = new MemoryPool();
+        init = true;
+    }
+    ptedit_entry_t vm = ptedit_resolve(addr, 0);
+    if (vm.pte & (1ull << PTEDIT_PAGE_BIT_PRESENT)) {
+        printf("already mapped\n");
+        size_t pfn = ptedit_pte_get_pfn(addr, 0);
+        printf("current pfn is %zu\n", pfn);
+        return;
+    } else {
+        printf("set to x\n");
+        void *new_page = mem_pool->allocate();
+        memset(new_page, 'X', PAGE_SIZE);
+        ((char *)new_page)[0xf] = 'X';
+        size_t pfn = ptedit_pte_get_pfn(new_page, 0);
+        install_page(addr, vm, pfn);
+        printf("new pfn is %zu\n", pfn);
+    }
+}
 
 static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
     int nready;
@@ -106,7 +149,7 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
            region. Vary the contents that are copied in, so that it
            is more obvious that each fault is handled separately. */
 
-        void *given_page = malloc(PAGE_SIZE);
+        void *given_page = mem_pool->allocate();
         assert(given_page != nullptr);
 
         if (pfh_args->fd == -1) {
@@ -139,12 +182,7 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
         //     (size_t)(ptedit_cast(vm.pte, ptedit_pte_t).pfn));
         // }
         // 3. update to pfn of fault address, and set valid bit, and update
-        vm.pte = ptedit_set_pfn(vm.pte, given_page_pfn);
-        vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_PRESENT);
-        vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_RW);
-        vm.pte = ptedit_pte_entry_set_bit(vm.pte, PTEDIT_PAGE_BIT_USER);
-        vm.valid = PTEDIT_VALID_MASK_PTE;
-        ptedit_update((void *)msg.arg.pagefault.address, 0, &vm);
+        install_page((void *)msg.arg.pagefault.address, vm, given_page_pfn);
 
         // debug: print updated page fault address
         // {
@@ -183,7 +221,7 @@ void *ul_mmap(void *addr, size_t length, int prot, int flags, int fd,
     static bool pteditor_init_flag = false;
     if (pteditor_init_flag == false) {
         // FIXME(Priority: Low): race condition: may lead to leak of ptedit_fd
-        /*init PTEditor*/
+        // /*init PTEditor*/
         if (ptedit_init()) {
             printf(
                 "Error: Could not initalize PTEditor, did you load the kernel "
@@ -192,6 +230,7 @@ void *ul_mmap(void *addr, size_t length, int prot, int flags, int fd,
         }
 
         ptedit_use_implementation(PTEDIT_IMPL_USER);
+        if (mem_pool == nullptr) mem_pool = new MemoryPool();
         pteditor_init_flag = true;
     }
 

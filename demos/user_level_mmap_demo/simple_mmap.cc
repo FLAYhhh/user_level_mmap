@@ -3,8 +3,11 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "phy_page_pool.h"
+#include "ptedit_header.h"
 #include "user_level_mmap.h"
 
+extern MemoryPool *mem_pool;
 int main(int argc, char *argv[]) {
     int s;
     char c;
@@ -21,8 +24,8 @@ int main(int argc, char *argv[]) {
 
     len = strtoull(argv[1], NULL, 0) * page_size;
 
-    addr = (char *)ul_mmap((void *)NULL, len, PROT_READ | PROT_WRITE,
-                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    addr = (char *)mmap((void *)NULL, len, PROT_READ | PROT_WRITE,
+                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (addr == MAP_FAILED) {
         printf("mmap failed\n");
         exit(1);
@@ -37,7 +40,9 @@ int main(int argc, char *argv[]) {
     l = 0xf; /* Ensure that faulting address is not on a page
                           boundary, in order to test that we correctly
                           handle that case in fault_handling_thread(). */
+    touch_page(addr);
     while (l < len) {
+        touch_page(&addr[l]);
         c = addr[l];
         printf("Read address %p in %s(): ", addr + l, __func__);
         printf("%c\n", c);

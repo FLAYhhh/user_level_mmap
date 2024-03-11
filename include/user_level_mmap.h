@@ -30,3 +30,4 @@ int ul_munmap(void *addr, size_t length);
 int ul_msync(void *addr, size_t length, int flags);
 int ul_mprotect(void *addr, size_t length, int prot);
 int ul_madvise(void *addr, size_t length, int advice);
+void touch_page(void *addr);
