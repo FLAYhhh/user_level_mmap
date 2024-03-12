@@ -16,7 +16,9 @@
  * \param offset The offset of the file or device, starting the mapping from this offset. It must be a multiple of the system page size.
  * \return On success, returns the starting address of the mapped area; on failure, returns MAP_FAILED (usually (void *)-1) and sets errno.
  */
-void *ul_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+#define INTERRUPT_MODE 0 
+#define NO_INTERRUPT_MODE 1
+void *ul_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset, int mode);
 
 /**
  * \brief ul_munmap() deletes the mappings for the specified address range, and causes further references to addresses within the range to generate invalid memory references.  The  region is also automatically unmapped when the process is terminated. On the other hand, closing the file descriptor does not unmap the region.

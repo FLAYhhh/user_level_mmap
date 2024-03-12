@@ -59,34 +59,20 @@ void install_page(void *addr, ptedit_entry_t &vm, size_t pfn) {
 }
 
 void touch_page(void *addr) {
-    // 1. get the pte of addr
-    static bool init = false;
-    if (init == false) {
-        if (ptedit_init()) {
-            printf(
-                "Error: Could not initalize PTEditor, did you load the kernel "
-                "module?\n");
-            exit(1);
-        }
-
-        ptedit_use_implementation(PTEDIT_IMPL_USER);
-        if (mem_pool == nullptr) mem_pool = new MemoryPool();
-        init = true;
-    }
     ptedit_entry_t vm = ptedit_resolve(addr, 0);
     if (vm.pte & (1ull << PTEDIT_PAGE_BIT_PRESENT)) {
-        printf("already mapped\n");
+        // printf("already mapped\n");
         size_t pfn = ptedit_pte_get_pfn(addr, 0);
-        printf("current pfn is %zu\n", pfn);
+        // printf("current pfn is %zu\n", pfn);
         return;
     } else {
-        printf("set to x\n");
+        // printf("set to x\n");
         void *new_page = mem_pool->allocate();
         memset(new_page, 'X', PAGE_SIZE);
         ((char *)new_page)[0xf] = 'X';
         size_t pfn = ptedit_pte_get_pfn(new_page, 0);
         install_page(addr, vm, pfn);
-        printf("new pfn is %zu\n", pfn);
+        // printf("new pfn is %zu\n", pfn);
     }
 }
 
@@ -217,7 +203,7 @@ static void page_fault_handler(std::shared_ptr<PFhandle_args> pfh_args) {
  * then, use userfaultfd to delegate page fault handle to user space.
  */
 void *ul_mmap(void *addr, size_t length, int prot, int flags, int fd,
-              off_t offset) {
+              off_t offset, int mode) {
     static bool pteditor_init_flag = false;
     if (pteditor_init_flag == false) {
         // FIXME(Priority: Low): race condition: may lead to leak of ptedit_fd
@@ -242,44 +228,47 @@ void *ul_mmap(void *addr, size_t length, int prot, int flags, int fd,
     /* 2. make vm area's page-faults handled by user level: register userfaultfd
      */
     /* Create and enable userfaultfd object. */
-    pthread_t thr; /* ID of thread that handles page faults */
-    struct uffdio_api uffdio_api;
-    struct uffdio_register uffdio_register;
+    if (mode == INTERRUPT_MODE) {
+        pthread_t thr; /* ID of thread that handles page faults */
+        struct uffdio_api uffdio_api;
+        struct uffdio_register uffdio_register;
 
-    const long uffd = syscall(SYS_userfaultfd, O_CLOEXEC | O_NONBLOCK);
-    if (uffd == -1) err(EXIT_FAILURE, "userfaultfd");
+        const long uffd = syscall(SYS_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+        if (uffd == -1) err(EXIT_FAILURE, "userfaultfd");
 
-    uffdio_api.api = UFFD_API;
-    uffdio_api.features = 0;
-    if (ioctl(uffd, UFFDIO_API, &uffdio_api) == -1)
-        err(EXIT_FAILURE, "ioctl-UFFDIO_API");
+        uffdio_api.api = UFFD_API;
+        uffdio_api.features = 0;
+        if (ioctl(uffd, UFFDIO_API, &uffdio_api) == -1)
+            err(EXIT_FAILURE, "ioctl-UFFDIO_API");
 
-    /* Register the memory range of the mapping we just created for
-       handling by the userfaultfd object. we request to track
-       missing pages (i.e., pages that have not yet been faulted in). */
+        /* Register the memory range of the mapping we just created for
+           handling by the userfaultfd object. we request to track
+           missing pages (i.e., pages that have not yet been faulted in). */
 
-    uffdio_register.range.start = (unsigned long)addr;
-    uffdio_register.range.len = length;
-    uffdio_register.mode = UFFDIO_REGISTER_MODE_MISSING;
-    if (ioctl(uffd, UFFDIO_REGISTER, &uffdio_register) == -1)
-        err(EXIT_FAILURE, "ioctl-UFFDIO_REGISTER");
+        uffdio_register.range.start = (unsigned long)addr;
+        uffdio_register.range.len = length;
+        uffdio_register.mode = UFFDIO_REGISTER_MODE_MISSING;
+        if (ioctl(uffd, UFFDIO_REGISTER, &uffdio_register) == -1)
+            err(EXIT_FAILURE, "ioctl-UFFDIO_REGISTER");
 
-    /* Create a thread that will process the userfaultfd events. */
+        /* Create a thread that will process the userfaultfd events. */
 
-    int dup_fd = -1;
-    if (fd != -1) {
-        dup_fd = dup(fd);
-        if (dup_fd < 0) {
-            printf("Failed to duplicate fd\n");
-            exit(1);
+        int dup_fd = -1;
+        if (fd != -1) {
+            dup_fd = dup(fd);
+            if (dup_fd < 0) {
+                printf("Failed to duplicate fd\n");
+                exit(1);
+            }
         }
-    }
-    auto pfh_args = std::make_shared<PFhandle_args>(uffd, dup_fd, offset, addr);
-    std::thread thread(page_fault_handler, pfh_args);
-    pfh_args->thread = std::move(thread);
+        auto pfh_args =
+            std::make_shared<PFhandle_args>(uffd, dup_fd, offset, addr);
+        std::thread thread(page_fault_handler, pfh_args);
+        pfh_args->thread = std::move(thread);
 
-    std::lock_guard<std::mutex> guard(mmap_regions_mu);
-    mmap_regions[addr] = pfh_args;
+        std::lock_guard<std::mutex> guard(mmap_regions_mu);
+        mmap_regions[addr] = pfh_args;
+    }
 
     return addr;
 }

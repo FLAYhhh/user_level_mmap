@@ -1015,8 +1015,8 @@ typedef struct {
 static ptedit_paging_definition_t ptedit_paging_definition;
 
 // ---------------------------------------------------------------------------
-// ptedit_fnc ptedit_resolve_t ptedit_resolve;
-// ptedit_fnc ptedit_update_t ptedit_update;
+ptedit_fnc ptedit_resolve_t ptedit_resolve;
+ptedit_fnc ptedit_update_t ptedit_update;
 
 // ---------------------------------------------------------------------------
 ptedit_fnc ptedit_entry_t ptedit_resolve_kernel(void* address, pid_t pid) {
@@ -1909,11 +1909,6 @@ ptedit_fnc void ptedit_pte_set_bit(void* address, pid_t pid, int bit) {
     vm.pte |= (1ull << bit);
     vm.valid = PTEDIT_VALID_MASK_PTE;
     ptedit_update(address, pid, &vm);
-}
-
-// set only one bit int a single call
-ptedit_fnc size_t ptedit_pte_entry_set_bit(size_t pte, int bit) {
-    return pte |= (1ull << bit);
 }
 
 // ---------------------------------------------------------------------------
